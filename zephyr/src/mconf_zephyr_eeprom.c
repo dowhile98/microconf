@@ -6,6 +6,7 @@
 
 #include "mconf_zephyr.h"
 
+#include <inttypes.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -29,7 +30,7 @@ static int mconf_zephyr_eeprom_read(void *callback_ctx, size_t offset, void *buf
     target = (off_t)(ctx->base_offset + offset);
     rc = eeprom_read(ctx->dev, target, buffer, size);
     if (rc < 0) {
-        LOG_ERR("eeprom_read failed at offset 0x%lx (size %zu): %d", (long)target, size, rc);
+        LOG_ERR("eeprom_read failed at offset 0x%" PRIxPTR " (size %zu): %d", (uintptr_t)target, size, rc);
         return -1;
     }
     return 0;
@@ -51,7 +52,7 @@ static int mconf_zephyr_eeprom_write(void *callback_ctx, size_t offset, const vo
     target = (off_t)(ctx->base_offset + offset);
     rc = eeprom_write(ctx->dev, target, buffer, size);
     if (rc < 0) {
-        LOG_ERR("eeprom_write failed at offset 0x%lx (size %zu): %d", (long)target, size, rc);
+        LOG_ERR("eeprom_write failed at offset 0x%" PRIxPTR " (size %zu): %d", (uintptr_t)target, size, rc);
         return -1;
     }
     return 0;
@@ -78,7 +79,7 @@ static int mconf_zephyr_eeprom_erase(void *callback_ctx, size_t offset, size_t s
         off_t target = (off_t)(ctx->base_offset + current_offset);
         int rc = eeprom_write(ctx->dev, target, ff_buf, chunk);
         if (rc < 0) {
-            LOG_ERR("eeprom_write erase failed at offset 0x%lx: %d", (long)target, rc);
+            LOG_ERR("eeprom_write erase failed at offset 0x%" PRIxPTR ": %d", (uintptr_t)target, rc);
             return -1;
         }
         remaining -= chunk;
@@ -101,13 +102,13 @@ int mconf_zephyr_eeprom_init(struct mconf_zephyr_eeprom_ctx *ctx,
     }
 
     if (!device_is_ready(dev)) {
-        LOG_ERR("EEPROM device '%s' is not ready", dev->name);
+        LOG_ERR("EEPROM device '%s' is not ready", device_name(dev));
         return -ENODEV;
     }
 
     dev_size = eeprom_get_size(dev);
     if (dev_size == 0u) {
-        LOG_ERR("EEPROM device '%s' reports zero capacity", dev->name);
+        LOG_ERR("EEPROM device '%s' reports zero capacity", device_name(dev));
         return -ENODEV;
     }
 
@@ -144,7 +145,7 @@ int mconf_zephyr_eeprom_init(struct mconf_zephyr_eeprom_ctx *ctx,
     io->erase = mconf_zephyr_eeprom_erase;
 
     LOG_INF("EEPROM backend initialized: %zu bytes total, 2 slots of %zu bytes on '%s'",
-            total_size, io->slot_size, dev->name);
+            total_size, io->slot_size, device_name(dev));
 
     return 0;
 }

@@ -6,6 +6,7 @@
 
 #include "mconf_zephyr.h"
 
+#include <inttypes.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(mconf_flash, CONFIG_MICROCONF_LOG_LEVEL);
@@ -24,8 +25,8 @@ static int mconf_zephyr_flash_read(void *callback_ctx, size_t offset, void *buff
 
     rc = flash_area_read(ctx->fa, (off_t)(ctx->base_offset + offset), buffer, size);
     if (rc != 0) {
-        LOG_ERR("flash_area_read failed at offset 0x%lx (size %zu): %d",
-                (long)(ctx->base_offset + offset), size, rc);
+        LOG_ERR("flash_area_read failed at offset 0x%" PRIxPTR " (size %zu): %d",
+                (uintptr_t)(ctx->base_offset + offset), size, rc);
         return -1;
     }
     return 0;
@@ -45,8 +46,8 @@ static int mconf_zephyr_flash_write(void *callback_ctx, size_t offset, const voi
 
     rc = flash_area_write(ctx->fa, (off_t)(ctx->base_offset + offset), buffer, size);
     if (rc != 0) {
-        LOG_ERR("flash_area_write failed at offset 0x%lx (size %zu): %d",
-                (long)(ctx->base_offset + offset), size, rc);
+        LOG_ERR("flash_area_write failed at offset 0x%" PRIxPTR " (size %zu): %d",
+                (uintptr_t)(ctx->base_offset + offset), size, rc);
         return -1;
     }
     return 0;
@@ -66,8 +67,8 @@ static int mconf_zephyr_flash_erase(void *callback_ctx, size_t offset, size_t si
 
     rc = flash_area_erase(ctx->fa, (off_t)(ctx->base_offset + offset), size);
     if (rc != 0) {
-        LOG_ERR("flash_area_erase failed at offset 0x%lx (size %zu): %d",
-                (long)(ctx->base_offset + offset), size, rc);
+        LOG_ERR("flash_area_erase failed at offset 0x%" PRIxPTR " (size %zu): %d",
+                (uintptr_t)(ctx->base_offset + offset), size, rc);
         return -1;
     }
     return 0;

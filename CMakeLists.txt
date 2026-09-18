@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
+# When consumed as a Zephyr module, the zephyr/CMakeLists.txt takes over.
+if(DEFINED ZEPHYR_BASE)
+  return()
+endif()
+
 project(microconf VERSION 1.0.1 LANGUAGES C CXX)
 
 include(CMakePackageConfigHelpers)

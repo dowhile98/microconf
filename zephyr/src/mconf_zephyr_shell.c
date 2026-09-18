@@ -6,6 +6,7 @@
 
 #include "mconf_zephyr.h"
 
+#include <inttypes.h>
 #include <zephyr/shell/shell.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,21 +22,42 @@ struct mconf_shell_entry {
 };
 
 static struct mconf_shell_entry s_entries[MCONF_SHELL_MAX_INSTANCES];
+static struct k_mutex s_shell_mutex;
+static bool s_mutex_initialized;
+
+static void shell_mutex_lock(void)
+{
+    if (!s_mutex_initialized) {
+        k_mutex_init(&s_shell_mutex);
+        s_mutex_initialized = true;
+    }
+    k_mutex_lock(&s_shell_mutex, K_FOREVER);
+}
+
+static void shell_mutex_unlock(void)
+{
+    if (s_mutex_initialized) {
+        k_mutex_unlock(&s_shell_mutex);
+    }
+}
 
 int mconf_zephyr_shell_register(mconf_t *ctx, const mconf_io_t *io, const char *name)
 {
     size_t i;
+    int ret;
 
     if ((ctx == NULL) || (name == NULL) || (name[0] == '\0')) {
         return -EINVAL;
     }
 
+    shell_mutex_lock();
+
     for (i = 0; i < MCONF_SHELL_MAX_INSTANCES; ++i) {
         if (s_entries[i].in_use && (strcmp(s_entries[i].name, name) == 0)) {
-            /* Update existing entry */
             s_entries[i].ctx = ctx;
             s_entries[i].io = io;
-            return 0;
+            ret = 0;
+            goto unlock;
         }
     }
 
@@ -46,14 +68,30 @@ int mconf_zephyr_shell_register(mconf_t *ctx, const mconf_io_t *io, const char *
             strncpy(s_entries[i].name, name, sizeof(s_entries[i].name) - 1u);
             s_entries[i].name[sizeof(s_entries[i].name) - 1u] = '\0';
             s_entries[i].in_use = true;
-            return 0;
+            ret = 0;
+            goto unlock;
         }
     }
 
-    return -ENOMEM;
+    ret = -ENOMEM;
+unlock:
+    shell_mutex_unlock();
+    return ret;
 }
 
 static struct mconf_shell_entry *find_shell_entry(const char *name)
+{
+    size_t i;
+    for (i = 0; i < MCONF_SHELL_MAX_INSTANCES; ++i) {
+        if (s_entries[i].in_use && (strcmp(s_entries[i].name, name) == 0)) {
+            return &s_entries[i];
+        }
+    }
+    return NULL;
+}
+
+/* Caller must hold s_shell_mutex */
+static struct mconf_shell_entry *find_shell_entry_locked(const char *name)
 {
     size_t i;
     for (i = 0; i < MCONF_SHELL_MAX_INSTANCES; ++i) {
@@ -100,7 +138,7 @@ static void print_field_value(const struct shell *sh, const mconf_t *ctx, size_t
     case MCONF_TYPE_I32: {
         int32_t val;
         memcpy(&val, data, sizeof(val));
-        shell_print(sh, "%ld", (long)val);
+        shell_print(sh, "%" PRId32, val);
         break;
     }
 #if (MCONF_ENABLE_FLOAT != 0)
@@ -136,6 +174,7 @@ static int cmd_mconf_list(const struct shell *sh, size_t argc, char **argv)
     size_t i;
     size_t count = 0;
 
+    shell_mutex_lock();
     shell_print(sh, "Registered microconf configurations:");
     for (i = 0; i < MCONF_SHELL_MAX_INSTANCES; ++i) {
         if (s_entries[i].in_use) {
@@ -147,6 +186,7 @@ static int cmd_mconf_list(const struct shell *sh, size_t argc, char **argv)
             count++;
         }
     }
+    shell_mutex_unlock();
     if (count == 0) {
         shell_print(sh, "  (none)");
     }
@@ -163,8 +203,10 @@ static int cmd_mconf_dump(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
@@ -181,6 +223,7 @@ static int cmd_mconf_dump(const struct shell *sh, size_t argc, char **argv)
         print_field_value(sh, entry->ctx, i);
     }
 
+    shell_mutex_unlock();
     return 0;
 }
 
@@ -195,19 +238,23 @@ static int cmd_mconf_get(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
 
     err = mconf_find(entry->ctx, argv[2], &index);
     if (err != MCONF_OK) {
+        shell_mutex_unlock();
         shell_error(sh, "Key '%s' not found in '%s'", argv[2], argv[1]);
         return -ENOENT;
     }
 
     print_field_value(sh, entry->ctx, index);
+    shell_mutex_unlock();
     return 0;
 }
 
@@ -223,14 +270,17 @@ static int cmd_mconf_set(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
 
     err = mconf_find(entry->ctx, argv[2], &index);
     if (err != MCONF_OK) {
+        shell_mutex_unlock();
         shell_error(sh, "Key '%s' not found", argv[2]);
         return -ENOENT;
     }
@@ -276,15 +326,18 @@ static int cmd_mconf_set(const struct shell *sh, size_t argc, char **argv)
         break;
     }
     default:
+        shell_mutex_unlock();
         shell_error(sh, "Type '%s' not editable via simple shell string", mconf_type_name(e->type));
         return -ENOTSUP;
     }
 
     if (err != MCONF_OK) {
+        shell_mutex_unlock();
         shell_error(sh, "Failed to set field: %s", mconf_err_str(err));
         return -EINVAL;
     }
 
+    shell_mutex_unlock();
     shell_print(sh, "Key '%s' updated successfully.", argv[2]);
     return 0;
 }
@@ -299,17 +352,21 @@ static int cmd_mconf_save(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
     if (entry->io == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' has no persistent IO backend attached", argv[1]);
         return -ENODEV;
     }
 
     err = mconf_save(entry->ctx, entry->io);
+    shell_mutex_unlock();
     if (err != MCONF_OK) {
         shell_error(sh, "Failed to save: %s (%d)", mconf_err_str(err), (int)err);
         return -EIO;
@@ -329,17 +386,21 @@ static int cmd_mconf_load(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
     if (entry->io == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' has no persistent IO backend attached", argv[1]);
         return -ENODEV;
     }
 
     err = mconf_load(entry->ctx, entry->io);
+    shell_mutex_unlock();
     if (err != MCONF_OK) {
         shell_error(sh, "Failed to load: %s (%d)", mconf_err_str(err), (int)err);
         return -EIO;
@@ -359,13 +420,16 @@ static int cmd_mconf_defaults(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    entry = find_shell_entry(argv[1]);
+    shell_mutex_lock();
+    entry = find_shell_entry_locked(argv[1]);
     if (entry == NULL) {
+        shell_mutex_unlock();
         shell_error(sh, "Configuration '%s' not found", argv[1]);
         return -ENOENT;
     }
 
     err = mconf_load_defaults(entry->ctx);
+    shell_mutex_unlock();
     if (err != MCONF_OK) {
         shell_error(sh, "Failed to load defaults: %s", mconf_err_str(err));
         return -EINVAL;

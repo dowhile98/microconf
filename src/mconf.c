@@ -6,7 +6,9 @@
 
 #include "mconf.h"
 
+#if (MCONF_ENABLE_FLOAT != 0)
 #include <float.h>
+#endif
 #include <string.h>
 
 #define MCONF_STORAGE_MAGIC_0 ((uint8_t)'M')
@@ -35,7 +37,17 @@ static int mconf_is_little_endian_ieee754(void)
 #if (MCONF_ENABLE_FLOAT == 0)
     return 0;
 #else
-    return (sizeof(float) == 4u) && (FLT_RADIX == 2) && (FLT_MANT_DIG == 24) && (FLT_MAX_EXP == 128);
+    if ((sizeof(float) != 4u) || (FLT_RADIX != 2) || (FLT_MANT_DIG != 24) || (FLT_MAX_EXP != 128)) {
+        return 0;
+    }
+    {
+        const uint32_t le_test = 0x01020304u;
+        const uint8_t *bytes = (const uint8_t *)&le_test;
+        if (bytes[0] != 0x04u) {
+            return 0;
+        }
+    }
+    return 1;
 #endif
 }
 
@@ -573,7 +585,7 @@ mconf_err_t mconf_find(const mconf_t *ctx, const char *key, size_t *index_out)
 #if (MCONF_ENABLE_NAMES == 0)
     (void)key;
     (void)index_out;
-        return MCONF_ERR_UNSUPPORTED;
+    return MCONF_ERR_UNSUPPORTED;
 #endif
 
     for (index = 0; index < ctx->schema->entry_count; ++index) {
@@ -917,6 +929,9 @@ static mconf_err_t mconf_encode_header(uint8_t *header, const mconf_t *ctx, uint
 
 static mconf_err_t mconf_io_read_exact(const mconf_io_t *io, size_t offset, void *buffer, size_t size)
 {
+    if (io->read == NULL) {
+        return MCONF_ERR_NULL;
+    }
     if (io->read(io->callback_ctx, offset, buffer, size) != 0) {
         return MCONF_ERR_IO;
     }
@@ -925,6 +940,9 @@ static mconf_err_t mconf_io_read_exact(const mconf_io_t *io, size_t offset, void
 
 static mconf_err_t mconf_io_write_exact(const mconf_io_t *io, size_t offset, const void *buffer, size_t size)
 {
+    if (io->write == NULL) {
+        return MCONF_ERR_NULL;
+    }
     if (io->write(io->callback_ctx, offset, buffer, size) != 0) {
         return MCONF_ERR_IO;
     }
@@ -1250,6 +1268,9 @@ mconf_err_t mconf_save(mconf_t *ctx, const mconf_io_t *io)
     } else if (slot1_err == MCONF_OK) {
         target_slot = 0u;
         next_generation = slot1_info.generation + 1u;
+    }
+    if (next_generation == 0u) {
+        next_generation = 1u;
     }
 
     err = mconf_encode_header(header, ctx, next_generation, (uint32_t)payload_length, payload_crc, MCONF_STORAGE_STATE_UNCOMMITTED);
