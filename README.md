@@ -34,10 +34,12 @@ but the included documentation calls out what is still `NOT VERIFIED`.
 - `CMakeLists.txt` with target `microconf`
 - alias target `microconf::microconf`
 - installable `microconfConfig.cmake` package metadata
+- Zephyr RTOS module packaging (`zephyr/module.yml`, Kconfig, and backends)
 - repo-local `tests/Makefile` that respects caller toolchain flags
 
 ## Docs
 
+- [Zephyr RTOS guide](docs/ZEPHYR_GUIDE.md)
 - [Cookbook](docs/COOKBOOK.md)
 - [API reference](docs/API_REFERENCE.md)
 - [Design](docs/DESIGN.md)

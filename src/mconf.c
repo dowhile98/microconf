@@ -16,6 +16,7 @@
 #define MCONF_STORAGE_STATE_UNCOMMITTED ((uint8_t)0x3Cu)
 #define MCONF_STORAGE_STATE_COMMITTED   ((uint8_t)0xA5u)
 #define MCONF_STORAGE_HEADER_SIZE ((size_t)32u)
+#define MCONF_STORAGE_STATE_OFFSET ((size_t)18u)
 #define MCONF_U16_MAX_VALUE ((size_t)0xFFFFu)
 
 typedef struct {
@@ -906,11 +907,11 @@ static mconf_err_t mconf_encode_header(uint8_t *header, const mconf_t *ctx, uint
         return MCONF_ERR_SIZE;
     }
     mconf_write_u16_le(&header[16], (uint16_t)ctx->schema->entry_count);
-    mconf_write_u16_le(&header[18], 0u);
+    header[MCONF_STORAGE_STATE_OFFSET] = state;
+    header[MCONF_STORAGE_STATE_OFFSET + 1u] = 0u;
     mconf_write_u32_le(&header[20], payload_length);
     mconf_write_u32_le(&header[24], generation);
     mconf_write_u32_le(&header[28], payload_crc32);
-    header[31] = state;
     return MCONF_OK;
 }
 
@@ -997,7 +998,7 @@ static mconf_err_t mconf_decode_header(const uint8_t *header, mconf_record_info_
     info->payload_length = mconf_read_u32_le(&header[20]);
     info->generation = mconf_read_u32_le(&header[24]);
     info->payload_crc32 = mconf_read_u32_le(&header[28]);
-    info->state = header[31];
+    info->state = header[MCONF_STORAGE_STATE_OFFSET];
     return MCONF_OK;
 }
 
@@ -1278,7 +1279,7 @@ mconf_err_t mconf_save(mconf_t *ctx, const mconf_io_t *io)
     if (err != MCONF_OK) {
         return err;
     }
-    err = mconf_io_write_exact(io, target_offset + 31u, &committed_state, sizeof(committed_state));
+    err = mconf_io_write_exact(io, target_offset + MCONF_STORAGE_STATE_OFFSET, &committed_state, sizeof(committed_state));
     if (err != MCONF_OK) {
         return err;
     }

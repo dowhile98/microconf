@@ -1,0 +1,72 @@
+# Copyright (c) 2026
+# SPDX-License-Identifier: MIT
+
+menuconfig MICROCONF
+	bool "microconf configuration library"
+	default y
+	help
+	  Enable microconf fixed-memory configuration library for caller-owned
+	  embedded data schemas and two-slot ping-pong storage persistence.
+
+if MICROCONF
+
+config MICROCONF_MAX_ENTRIES
+	int "Maximum schema entries"
+	default 64
+	range 1 65535
+	help
+	  Maximum number of entries permitted in any configuration schema.
+
+config MICROCONF_MAX_KEY_LEN
+	int "Maximum key length"
+	default 48
+	range 1 256
+	help
+	  Maximum length in bytes for schema key name strings.
+
+config MICROCONF_ENABLE_NAMES
+	bool "Enable key names and mconf_find lookup"
+	default y
+	help
+	  Enable string key names for schema entries and string-based key lookup.
+
+config MICROCONF_ENABLE_FLOAT
+	bool "Enable float32 type support"
+	default y
+	help
+	  Enable support for MCONF_TYPE_FLOAT32 entries.
+
+menu "Storage Backends"
+
+config MICROCONF_BACKEND_EEPROM
+	bool "Zephyr EEPROM storage backend"
+	depends on EEPROM
+	default y
+	help
+	  Enable microconf storage persistence backend for EEPROM devices using the
+	  Zephyr <zephyr/drivers/eeprom.h> subsystem. Supports I2C, SPI, or on-chip
+	  EEPROM controllers.
+
+config MICROCONF_BACKEND_FLASH
+	bool "Zephyr Flash Map storage backend"
+	depends on FLASH_MAP
+	default y
+	help
+	  Enable microconf storage persistence backend for flash partitions using the
+	  Zephyr <zephyr/storage/flash_map.h> subsystem.
+
+endmenu
+
+config MICROCONF_SHELL
+	bool "Zephyr Shell commands for microconf"
+	depends on SHELL
+	default n
+	help
+	  Enable interactive shell commands ('mconf') to inspect, get, set,
+	  save, and load configuration schemas over serial console or shell.
+
+module = MICROCONF
+module-str = microconf
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # MICROCONF
