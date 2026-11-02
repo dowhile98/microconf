@@ -102,13 +102,13 @@ int mconf_zephyr_eeprom_init(struct mconf_zephyr_eeprom_ctx *ctx,
     }
 
     if (!device_is_ready(dev)) {
-        LOG_ERR("EEPROM device '%s' is not ready", device_name(dev));
+        LOG_ERR("EEPROM device '%s' is not ready", dev->name);
         return -ENODEV;
     }
 
     dev_size = eeprom_get_size(dev);
     if (dev_size == 0u) {
-        LOG_ERR("EEPROM device '%s' reports zero capacity", device_name(dev));
+        LOG_ERR("EEPROM device '%s' reports zero capacity", dev->name);
         return -ENODEV;
     }
 
@@ -145,7 +145,7 @@ int mconf_zephyr_eeprom_init(struct mconf_zephyr_eeprom_ctx *ctx,
     io->erase = mconf_zephyr_eeprom_erase;
 
     LOG_INF("EEPROM backend initialized: %zu bytes total, 2 slots of %zu bytes on '%s'",
-            total_size, io->slot_size, device_name(dev));
+            total_size, io->slot_size, dev->name);
 
     return 0;
 }
